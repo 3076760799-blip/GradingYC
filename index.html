@@ -7,6 +7,7 @@
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <script src="access-codes.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
        <style>
@@ -8358,24 +8359,36 @@
             }
             var records = [];
             var codeTable = [];
+            var missingFixed = [];
             for (var i=0;i<names.length;i++){
                 var name = names[i];
-                var code = genCode();
+                var fixed = (typeof window.FIXED_ACCESS_CODES !== 'undefined' && window.FIXED_ACCESS_CODES[name]) || '';
+                var code = fixed || genCode();
+                if(!fixed) missingFixed.push(name);
                 records.push(encryptPackage(byName[name], code));
-                codeTable.push({ name: name, code: code });
+                codeTable.push({ name: name, code: code, fixed: !!fixed });
             }
             var dataJs = 'window.ENCRYPTED_RECORDS = ' + JSON.stringify(records) + ';';
-            renderPublishResult(dataJs, codeTable);
+            renderPublishResult(dataJs, codeTable, missingFixed);
         }
         function escapeHtml(s){
             return String(s).replace(/[&<>"']/g, function(m){
                 return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]);
             });
         }
-        function renderPublishResult(dataJs, codeTable){
+        function renderPublishResult(dataJs, codeTable, missingFixed){
             var box = document.getElementById('publishResult');
             if(!box) return;
             box.style.display = 'block';
+            var mf = missingFixed || [];
+            var fixedNote = '';
+            if(mf.length === 0){
+                fixedNote = '<div class="alert" style="padding:12px;border-radius:8px;background:#e3f2fd;color:#0d47a1;margin-top:12px;">'+
+                    '<i class="fas fa-lock"></i> 已启用<strong>固定访问码</strong>：本次使用的访问码与你之前发布的一致，家长已持有的访问码长期有效，无需重新发送。</div>';
+            } else {
+                fixedNote = '<div class="alert" style="padding:12px;border-radius:8px;background:#fff3e0;color:#e65100;margin-top:12px;">'+
+                    '<i class="fas fa-exclamation-triangle"></i> 以下 <strong>'+mf.length+'</strong> 位学生<strong>尚未设置固定访问码</strong>，本次已自动生成新随机码：<strong>'+escapeHtml(mf.join('、'))+'</strong>。请记录这些新码并发给对应家长；之后可在 <code>access-codes.js</code> 中为其补设固定码，即可长期固定。</div>';
+            }
             var blob = new Blob([dataJs], {type:'text/javascript'});
             var url = URL.createObjectURL(blob);
             var rows = codeTable.map(function(c, i){
@@ -8398,6 +8411,7 @@
                         '</ol>'+
                     '</div>'+
                 '</div>'+
+                fixedNote +
                 '<div class="action-buttons" style="margin:15px 0;">'+
                     '<a class="btn btn-success" id="downloadDataBtn" href="'+url+'" download="grades-data.js"><i class="fas fa-download"></i> 下载 grades-data.js</a> '+
                     '<button class="btn btn-primary" id="copyAllCodesBtn"><i class="fas fa-copy"></i> 复制全部访问码</button> '+
