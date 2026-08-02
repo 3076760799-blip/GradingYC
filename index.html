@@ -6,6 +6,7 @@
     <title>学生成绩分析系统 - 理科版</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     <style>
        <style>
@@ -2635,6 +2636,27 @@
                     </div>
                 </div>
                 
+                <!-- 新增：发布 / 分享给家长（加密隔离） -->
+                <div class="card" style="margin-top: 20px; border: 2px solid #2e7d32; box-shadow: 0 0 0 2px rgba(46,125,50,.08);">
+                    <div class="card-header">
+                        <h3 class="card-title"><i class="fas fa-share-alt"></i> 发布 / 分享给家长（加密隔离）</h3>
+                    </div>
+                    <div style="padding: 20px;">
+                        <p>点击下面的按钮，系统会把<strong>每位学生</strong>的成绩<strong>单独加密</strong>，生成两份内容：</p>
+                        <ol style="margin: 8px 0 8px 22px; line-height: 1.9;">
+                            <li><strong>grades-data.js</strong>：加密后的数据文件。请上传到你的 GitHub 仓库根目录（覆盖同名文件并重新发布）。</li>
+                            <li><strong>家长访问码清单</strong>：每位学生一个唯一访问码，请<strong>私发</strong>给对应家长（微信/短信均可）。</li>
+                        </ol>
+                        <p style="color:#555;">家长打开同一个网址 <code>parent.html</code>，输入访问码即可<strong>只看到自己孩子</strong>的成绩；其他孩子的数据在文件中是密文，看不到。访问码等同于查看钥匙，请通过私密渠道发送、勿公开。</p>
+                        <div class="action-buttons" style="margin-top: 15px;">
+                            <button class="btn btn-success" id="publishBtn">
+                                <i class="fas fa-lock"></i> 生成加密数据 &amp; 家长访问码
+                            </button>
+                        </div>
+                        <div id="publishResult" style="margin-top: 20px; display: none;"></div>
+                    </div>
+                </div>
+
                 <div class="card" style="margin-top: 20px;">
                     <div class="card-header">
                         <h3 class="card-title"><i class="fas fa-cog"></i> 数据存储设置</h3>
@@ -8269,6 +8291,148 @@
                 alert(`已清理 ${removedCount} 个过期考试数据`);
             }
         }
+    </script>
+
+    <!-- 家长分享：发布与加密逻辑（依赖 CryptoJS） -->
+    <script>
+    (function(){
+        'use strict';
+        if (typeof CryptoJS === 'undefined') {
+            console.error('CryptoJS 未加载，发布功能不可用');
+            return;
+        }
+        var SUBJECTS = [
+            {key:'chinese', label:'语文'}, {key:'math', label:'数学'},
+            {key:'english', label:'英语'}, {key:'physics', label:'物理'},
+            {key:'chemistry', label:'化学'}, {key:'biology', label:'生物'}
+        ];
+
+        function genCode(){
+            var chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
+            var s = '';
+            for (var i=0;i<12;i++){ s += chars[Math.floor(Math.random()*chars.length)]; }
+            return s;
+        }
+        function buildPackages(){
+            var byName = {};
+            var ex = (typeof exams !== 'undefined') ? exams : [];
+            ex.forEach(function(exam){
+                var list = exam.data || [];
+                list.forEach(function(rec){
+                    var name = (rec.name||'').trim();
+                    if(!name) return;
+                    if(!byName[name]) byName[name] = { name: name, exams: [] };
+                    var scores = { total: rec.total };
+                    var ranks = { totalRank: (rec.totalRank != null ? rec.totalRank : (rec.gradeRank != null ? rec.gradeRank : null)) };
+                    SUBJECTS.forEach(function(s){
+                        scores[s.key] = rec[s.key];
+                        ranks[s.key+'Rank'] = rec[s.key+'Rank'];
+                    });
+                    byName[name].exams.push({
+                        examName: exam.name,
+                        examDate: exam.date || '',
+                        lines: exam.lines || {},
+                        scores: scores,
+                        ranks: ranks
+                    });
+                });
+            });
+            Object.keys(byName).forEach(function(n){
+                byName[n].exams.sort(function(a,b){ return (a.examDate||'').localeCompare(b.examDate||''); });
+            });
+            return byName;
+        }
+        function encryptPackage(pkg, code){
+            var salt = CryptoJS.lib.WordArray.random(128/8);
+            var iv = CryptoJS.lib.WordArray.random(128/8);
+            var key = CryptoJS.PBKDF2(code, salt, { keySize: 256/32, iterations: 100000 });
+            var enc = CryptoJS.AES.encrypt(JSON.stringify(pkg), key, { iv: iv });
+            return { v:1, salt: salt.toString(), iv: iv.toString(), ct: enc.toString() };
+        }
+        function publishForParents(){
+            var byName = buildPackages();
+            var names = Object.keys(byName);
+            if(names.length === 0){
+                alert('暂无学生数据，请先在“总览”中录入或导入成绩。');
+                return;
+            }
+            var records = [];
+            var codeTable = [];
+            for (var i=0;i<names.length;i++){
+                var name = names[i];
+                var code = genCode();
+                records.push(encryptPackage(byName[name], code));
+                codeTable.push({ name: name, code: code });
+            }
+            var dataJs = 'window.ENCRYPTED_RECORDS = ' + JSON.stringify(records) + ';';
+            renderPublishResult(dataJs, codeTable);
+        }
+        function escapeHtml(s){
+            return String(s).replace(/[&<>"']/g, function(m){
+                return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m]);
+            });
+        }
+        function renderPublishResult(dataJs, codeTable){
+            var box = document.getElementById('publishResult');
+            if(!box) return;
+            box.style.display = 'block';
+            var blob = new Blob([dataJs], {type:'text/javascript'});
+            var url = URL.createObjectURL(blob);
+            var rows = codeTable.map(function(c, i){
+                return '<tr>'+
+                    '<td style="padding:8px;border-bottom:1px solid #eee;">'+(i+1)+'</td>'+
+                    '<td style="padding:8px;border-bottom:1px solid #eee;">'+escapeHtml(c.name)+'</td>'+
+                    '<td style="padding:8px;border-bottom:1px solid #eee;"><code style="background:#f4f4f4;padding:2px 6px;border-radius:4px;">'+c.code+'</code></td>'+
+                    '<td style="padding:8px;border-bottom:1px solid #eee;"><button class="btn btn-sm btn-info" data-code="'+c.code+'">复制</button></td>'+
+                '</tr>';
+            }).join('');
+            box.innerHTML =
+                '<div class="alert alert-success" style="padding:15px;border-radius:8px;background:#e8f5e9;color:#1b5e20;">'+
+                    '<i class="fas fa-check-circle"></i> '+
+                    '<div style="margin-top:6px;">'+
+                        '<strong>✅ 已生成 '+codeTable.length+' 位学生的加密数据。</strong>'+
+                        '<p style="margin:6px 0 0;">请按下面两步操作：</p>'+
+                        '<ol style="margin:6px 0 0 22px;line-height:1.9;">'+
+                            '<li>点击“下载 grades-data.js”，把文件上传到 GitHub 仓库根目录（覆盖同名文件并重新发布）。</li>'+
+                            '<li>把下方每位学生的<strong>访问码</strong>私发给对应家长。家长打开 <code>parent.html</code> 网址、输入访问码即可查看自家孩子成绩。</li>'+
+                        '</ol>'+
+                    '</div>'+
+                '</div>'+
+                '<div class="action-buttons" style="margin:15px 0;">'+
+                    '<a class="btn btn-success" id="downloadDataBtn" href="'+url+'" download="grades-data.js"><i class="fas fa-download"></i> 下载 grades-data.js</a> '+
+                    '<button class="btn btn-primary" id="copyAllCodesBtn"><i class="fas fa-copy"></i> 复制全部访问码</button>'+
+                '</div>'+
+                '<div style="overflow-x:auto;">'+
+                    '<table style="width:100%;border-collapse:collapse;">'+
+                        '<thead><tr style="background:#fafafa;text-align:left;">'+
+                            '<th style="padding:8px;">#</th><th style="padding:8px;">学生姓名</th><th style="padding:8px;">访问码</th><th style="padding:8px;">操作</th>'+
+                        '</tr></thead>'+
+                        '<tbody>'+rows+'</tbody>'+
+                    '</table>'+
+                '</div>'+
+                '<p style="color:#888;margin-top:10px;font-size:13px;">提示：访问码等同于查看钥匙，泄露会导致他人看到该学生成绩，请通过私密渠道发送。</p>';
+            document.getElementById('copyAllCodesBtn').addEventListener('click', function(){
+                var text = codeTable.map(function(c){ return c.name+'\t'+c.code; }).join('\n');
+                copyText(text);
+            });
+            Array.prototype.forEach.call(box.querySelectorAll('button[data-code]'), function(btn){
+                btn.addEventListener('click', function(){ copyText(btn.getAttribute('data-code')); });
+            });
+        }
+        function copyText(text){
+            if(navigator.clipboard && navigator.clipboard.writeText){
+                navigator.clipboard.writeText(text).then(function(){ alert('已复制到剪贴板'); }).catch(function(){ fallbackCopy(text); });
+            } else { fallbackCopy(text); }
+        }
+        function fallbackCopy(text){
+            var ta = document.createElement('textarea');
+            ta.value = text; document.body.appendChild(ta); ta.select();
+            try { document.execCommand('copy'); alert('已复制到剪贴板'); } catch(e){ alert('复制失败，请手动选择：\n'+text); }
+            document.body.removeChild(ta);
+        }
+        var btn = document.getElementById('publishBtn');
+        if(btn){ btn.addEventListener('click', publishForParents); }
+    })();
     </script>
 </body>
 </html>

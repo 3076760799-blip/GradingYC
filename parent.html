@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>学生成绩查询</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/crypto-js/4.1.1/crypto-js.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background: linear-gradient(135deg, #e3f2fd 0%, #f4f8fb 100%);
+            color: #263238;
+            min-height: 100vh;
+            padding: 16px;
+        }
+        .wrap { max-width: 720px; margin: 0 auto; }
+        .topbar {
+            text-align: center;
+            margin-bottom: 18px;
+            color: #1565c0;
+        }
+        .topbar h1 { font-size: 22px; font-weight: 700; }
+        .topbar p { font-size: 13px; color: #607d8b; margin-top: 4px; }
+        .card {
+            background: #fff;
+            border-radius: 14px;
+            box-shadow: 0 6px 22px rgba(21,101,192,.10);
+            padding: 22px;
+            margin-bottom: 16px;
+        }
+        .login-title { font-size: 17px; font-weight: 700; margin-bottom: 14px; color: #1565c0; }
+        .input-row { display: flex; gap: 10px; }
+        input[type="text"] {
+            flex: 1;
+            padding: 13px 14px;
+            border: 1.5px solid #cfd8dc;
+            border-radius: 10px;
+            font-size: 16px;
+            outline: none;
+            letter-spacing: 1px;
+        }
+        input[type="text"]:focus { border-color: #1565c0; }
+        button.primary {
+            background: #1565c0;
+            color: #fff;
+            border: none;
+            border-radius: 10px;
+            padding: 13px 20px;
+            font-size: 15px;
+            font-weight: 600;
+            cursor: pointer;
+            white-space: nowrap;
+        }
+        button.primary:active { transform: scale(.98); }
+        .err { color: #c62828; font-size: 13px; margin-top: 10px; min-height: 18px; }
+        .banner {
+            background: #fff3e0;
+            color: #e65100;
+            border-radius: 10px;
+            padding: 12px 14px;
+            font-size: 13px;
+            margin-bottom: 16px;
+            text-align: center;
+        }
+        .stu-name { font-size: 20px; font-weight: 700; color: #1565c0; margin-bottom: 4px; }
+        .exam-select-row { display: flex; align-items: center; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+        .exam-select-row label { font-size: 14px; color: #455a64; }
+        select {
+            padding: 9px 12px;
+            border: 1.5px solid #cfd8dc;
+            border-radius: 9px;
+            font-size: 14px;
+            background: #fff;
+            flex: 1;
+            min-width: 160px;
+        }
+        .section-title { font-size: 15px; font-weight: 700; color: #37474f; margin: 16px 0 10px; display: flex; align-items: center; gap: 6px; }
+        .total-box {
+            text-align: center;
+            background: linear-gradient(135deg, #e3f2fd, #bbdefb);
+            border-radius: 12px;
+            padding: 18px;
+        }
+        .total-box .num { font-size: 40px; font-weight: 800; color: #0d47a1; }
+        .total-box .lab { font-size: 13px; color: #455a64; }
+        .line-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; margin-top: 14px; }
+        .line-item {
+            background: #f8fafc;
+            border-radius: 10px;
+            padding: 12px;
+            display: flex; justify-content: space-between; align-items: center;
+        }
+        .line-item .ln { font-size: 13px; color: #607d8b; }
+        .line-item .lv { font-size: 15px; font-weight: 700; color: #263238; }
+        .badge { font-size: 12px; padding: 2px 9px; border-radius: 20px; font-weight: 700; }
+        .badge.pass { background: #e8f5e9; color: #2e7d32; }
+        .badge.fail { background: #ffebee; color: #c62828; }
+        table { width: 100%; border-collapse: collapse; font-size: 14px; }
+        th, td { padding: 10px 8px; text-align: center; border-bottom: 1px solid #eceff1; }
+        th { color: #607d8b; font-weight: 600; background: #f8fafc; }
+        td.subj { text-align: left; font-weight: 600; color: #37474f; }
+        .rank-pill { background: #ede7f6; color: #4527a0; border-radius: 20px; padding: 2px 10px; font-weight: 700; font-size: 13px; }
+        .chart-box { position: relative; height: 240px; }
+        .trend-ctrl { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+        .trend-ctrl label { font-size: 13px; color: #455a64; }
+        .footer-note { text-align: center; font-size: 12px; color: #90a4ae; margin-top: 6px; }
+        .reset-btn {
+            background: #eceff1; color: #455a64; border: none; border-radius: 9px;
+            padding: 9px 14px; font-size: 13px; cursor: pointer; margin-top: 6px;
+        }
+        .hidden { display: none !important; }
+        .empty { text-align: center; color: #90a4ae; padding: 30px 10px; font-size: 14px; }
+    </style>
+</head>
+<body>
+<div class="wrap">
+    <div class="topbar">
+        <h1><i class="fas fa-graduation-cap"></i> 学生成绩查询</h1>
+        <p>输入老师提供的访问码，查看您孩子的成绩</p>
+    </div>
+
+    <div id="banner" class="banner hidden"></div>
+
+    <!-- 登录 -->
+    <div id="loginCard" class="card">
+        <div class="login-title"><i class="fas fa-lock"></i> 家长身份验证</div>
+        <div class="input-row">
+            <input type="text" id="codeInput" placeholder="请输入访问码（如 AB3K9M2P5Q7X）" autocomplete="off" />
+            <button class="primary" id="queryBtn">查询</button>
+        </div>
+        <div class="err" id="errMsg"></div>
+    </div>
+
+    <!-- 结果 -->
+    <div id="resultCard" class="card hidden">
+        <div style="display:flex; justify-content:space-between; align-items:flex-start;">
+            <div>
+                <div class="stu-name" id="stuName"></div>
+                <div style="font-size:13px; color:#78909c;" id="examCount"></div>
+            </div>
+            <button class="reset-btn" id="resetBtn"><i class="fas fa-sync-alt"></i> 重新查询</button>
+        </div>
+
+        <div class="exam-select-row">
+            <label>选择考试：</label>
+            <select id="examSelect"></select>
+        </div>
+
+        <div class="section-title"><i class="fas fa-star"></i> 本次总分</div>
+        <div class="total-box">
+            <div class="num" id="totalNum">--</div>
+            <div class="lab">总分</div>
+        </div>
+        <div class="line-grid" id="lineGrid"></div>
+
+        <div class="section-title"><i class="fas fa-list-ol"></i> 各科成绩与排名</div>
+        <table id="scoreTable">
+            <thead>
+                <tr><th style="text-align:left;">科目</th><th>分数</th><th>排名</th></tr>
+            </thead>
+            <tbody></tbody>
+        </table>
+
+        <div class="section-title"><i class="fas fa-chart-line"></i> 历次趋势</div>
+        <div class="trend-ctrl">
+            <label>趋势指标：</label>
+            <select id="trendSelect">
+                <option value="total">总分</option>
+                <option value="chinese">语文</option>
+                <option value="math">数学</option>
+                <option value="english">英语</option>
+                <option value="physics">物理</option>
+                <option value="chemistry">化学</option>
+                <option value="biology">生物</option>
+            </select>
+        </div>
+        <div class="chart-box"><canvas id="trendChart"></canvas></div>
+
+        <div class="footer-note">本页仅供您查看自己孩子的成绩，数据已加密隔离。</div>
+    </div>
+</div>
+
+<!-- 加密数据（由老师在管理页“发布”后生成并上传） -->
+<script src="grades-data.js"></script>
+<script>
+(function(){
+    'use strict';
+    var SUBJECTS = [
+        {key:'chinese', label:'语文'}, {key:'math', label:'数学'},
+        {key:'english', label:'英语'}, {key:'physics', label:'物理'},
+        {key:'chemistry', label:'化学'}, {key:'biology', label:'生物'}
+    ];
+    var LINE_DEFS = [
+        {key:'doubleFirst', label:'双一流线'},
+        {key:'excellent', label:'高优线'},
+        {key:'firstTier', label:'重本线'},
+        {key:'keyTier', label:'本科线'}
+    ];
+
+    var records = (typeof window.ENCRYPTED_RECORDS !== 'undefined') ? window.ENCRYPTED_RECORDS : null;
+    var chart = null;
+    var currentPkg = null;
+
+    var $ = function(id){ return document.getElementById(id); };
+
+    if(!records){
+        var b = $('banner');
+        b.classList.remove('hidden');
+        b.innerHTML = '<i class="fas fa-exclamation-circle"></i> 数据尚未发布，请联系老师完成“发布”并上传 grades-data.js。';
+    }
+
+    function decryptRecord(rec, code){
+        try {
+            var salt = CryptoJS.enc.Hex.parse(rec.salt);
+            var iv = CryptoJS.enc.Hex.parse(rec.iv);
+            var key = CryptoJS.PBKDF2(code, salt, { keySize: 256/32, iterations: 100000 });
+            var dec = CryptoJS.AES.decrypt(rec.ct, key, { iv: iv });
+            var text = dec.toString(CryptoJS.enc.Utf8);
+            if(!text) return null;
+            return JSON.parse(text);
+        } catch(e){ return null; }
+    }
+
+    function doQuery(){
+        var code = ($('codeInput').value || '').trim().toUpperCase();
+        $('errMsg').textContent = '';
+        if(!code){ $('errMsg').textContent = '请输入访问码。'; return; }
+        if(!records){ $('errMsg').textContent = '数据尚未发布，无法查询。'; return; }
+        var found = null;
+        for(var i=0;i<records.length;i++){
+            var pkg = decryptRecord(records[i], code);
+            if(pkg){ found = pkg; break; }
+        }
+        if(!found){
+            $('errMsg').textContent = '访问码错误，请核对后重试。';
+            return;
+        }
+        currentPkg = found;
+        showResult(found);
+    }
+
+    function showResult(pkg){
+        $('loginCard').classList.add('hidden');
+        $('resultCard').classList.remove('hidden');
+        $('stuName').textContent = pkg.name || '同学';
+        $('examCount').textContent = '共 ' + pkg.exams.length + ' 次考试记录';
+        // 考试下拉
+        var sel = $('examSelect');
+        sel.innerHTML = '';
+        pkg.exams.forEach(function(ex, i){
+            var opt = document.createElement('option');
+            opt.value = i;
+            opt.textContent = ex.examName + (ex.examDate ? ('（' + ex.examDate + '）') : '');
+            sel.appendChild(opt);
+        });
+        sel.value = pkg.exams.length - 1; // 默认最新
+        sel.onchange = function(){ renderExam(pkg, parseInt(sel.value, 10)); };
+        $('trendSelect').onchange = function(){ renderTrend(pkg); };
+        renderExam(pkg, pkg.exams.length - 1);
+        renderTrend(pkg);
+    }
+
+    function renderExam(pkg, idx){
+        var ex = pkg.exams[idx];
+        if(!ex) return;
+        var total = (ex.scores && ex.scores.total != null) ? ex.scores.total : '--';
+        $('totalNum').textContent = total;
+
+        // 分数线对比
+        var grid = $('lineGrid');
+        grid.innerHTML = '';
+        var lines = (ex.lines && ex.lines.total) ? ex.lines.total : {};
+        LINE_DEFS.forEach(function(d){
+            var val = (lines[d.key] != null) ? lines[d.key] : null;
+            var item = document.createElement('div');
+            item.className = 'line-item';
+            if(val == null){
+                item.innerHTML = '<span class="ln">'+d.label+'</span><span class="lv">未设</span>';
+            } else {
+                var t = Number(total), v = Number(val);
+                var pass = !isNaN(t) && t >= v;
+                item.innerHTML = '<span class="ln">'+d.label+'<br><span style="font-size:11px;color:#90a4ae;">'+v+' 分</span></span>' +
+                    '<span class="badge '+(pass?'pass':'fail')+'">'+(pass?'已过':'未过')+'</span>';
+            }
+            grid.appendChild(item);
+        });
+
+        // 各科成绩与排名
+        var tb = $('scoreTable').querySelector('tbody');
+        tb.innerHTML = '';
+        SUBJECTS.forEach(function(s){
+            var sc = (ex.scores && ex.scores[s.key] != null) ? ex.scores[s.key] : '--';
+            var rk = (ex.ranks && ex.ranks[s.key+'Rank'] != null && ex.ranks[s.key+'Rank'] !== 0) ? ex.ranks[s.key+'Rank'] : '—';
+            var tr = document.createElement('tr');
+            tr.innerHTML = '<td class="subj">'+s.label+'</td><td>'+sc+'</td><td><span class="rank-pill">'+rk+'</span></td>';
+            tb.appendChild(tr);
+        });
+        // 总分排名行
+        var trk = (ex.ranks && ex.ranks.totalRank != null && ex.ranks.totalRank !== 0) ? ex.ranks.totalRank : '—';
+        var tr2 = document.createElement('tr');
+        tr2.innerHTML = '<td class="subj" style="color:#0d47a1;">总分排名</td><td>—</td><td><span class="rank-pill" style="background:#e3f2fd;color:#0d47a1;">'+trk+'</span></td>';
+        tb.appendChild(tr2);
+    }
+
+    function renderTrend(pkg){
+        var metric = $('trendSelect').value;
+        var labels = [], data = [];
+        pkg.exams.forEach(function(ex){
+            labels.push(ex.examName + (ex.examDate ? ('\n'+ex.examDate) : ''));
+            var v = (ex.scores && ex.scores[metric] != null) ? ex.scores[metric] : null;
+            data.push(v);
+        });
+        var ctx = $('trendChart').getContext('2d');
+        if(chart){ chart.destroy(); }
+        chart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: (metric === 'total' ? '总分' : SUBJECTS.filter(function(s){return s.key===metric;})[0].label) + '趋势',
+                    data: data,
+                    borderColor: '#1565c0',
+                    backgroundColor: 'rgba(21,101,192,.12)',
+                    fill: true,
+                    tension: 0.25,
+                    spanGaps: true,
+                    pointRadius: 4,
+                    pointBackgroundColor: '#1565c0'
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                plugins: { legend: { display: false } },
+                scales: {
+                    y: { beginAtZero: true, ticks: { font: { size: 11 } } },
+                    x: { ticks: { font: { size: 10 }, maxRotation: 0, autoSkip: false } }
+                }
+            }
+        });
+    }
+
+    $('queryBtn').addEventListener('click', doQuery);
+    $('codeInput').addEventListener('keydown', function(e){ if(e.key === 'Enter') doQuery(); });
+    $('resetBtn').addEventListener('click', function(){
+        currentPkg = null;
+        $('codeInput').value = '';
+        $('errMsg').textContent = '';
+        $('resultCard').classList.add('hidden');
+        $('loginCard').classList.remove('hidden');
+    });
+})();
+</script>
+</body>
+</html>
