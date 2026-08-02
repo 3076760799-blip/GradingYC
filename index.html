@@ -8400,7 +8400,8 @@
                 '</div>'+
                 '<div class="action-buttons" style="margin:15px 0;">'+
                     '<a class="btn btn-success" id="downloadDataBtn" href="'+url+'" download="grades-data.js"><i class="fas fa-download"></i> 下载 grades-data.js</a> '+
-                    '<button class="btn btn-primary" id="copyAllCodesBtn"><i class="fas fa-copy"></i> 复制全部访问码</button>'+
+                    '<button class="btn btn-primary" id="copyAllCodesBtn"><i class="fas fa-copy"></i> 复制全部访问码</button> '+
+                    '<button class="btn btn-warning" id="exportCodesExcelBtn"><i class="fas fa-file-excel"></i> 导出 Excel 访问码清单</button>'+
                 '</div>'+
                 '<div style="overflow-x:auto;">'+
                     '<table style="width:100%;border-collapse:collapse;">'+
@@ -8414,6 +8415,16 @@
             document.getElementById('copyAllCodesBtn').addEventListener('click', function(){
                 var text = codeTable.map(function(c){ return c.name+'\t'+c.code; }).join('\n');
                 copyText(text);
+            });
+            document.getElementById('exportCodesExcelBtn').addEventListener('click', function(){
+                if(typeof XLSX === 'undefined'){ alert('Excel 组件未加载，请刷新页面后重试'); return; }
+                var aoa = [['序号','学生姓名','访问码（密钥）']];
+                codeTable.forEach(function(c, i){ aoa.push([i+1, c.name, c.code]); });
+                var ws = XLSX.utils.aoa_to_sheet(aoa);
+                ws['!cols'] = [{wch:6},{wch:16},{wch:24}];
+                var wb = XLSX.utils.book_new();
+                XLSX.utils.book_append_sheet(wb, ws, '访问码清单');
+                XLSX.writeFile(wb, '学生访问码清单.xlsx');
             });
             Array.prototype.forEach.call(box.querySelectorAll('button[data-code]'), function(btn){
                 btn.addEventListener('click', function(){ copyText(btn.getAttribute('data-code')); });
