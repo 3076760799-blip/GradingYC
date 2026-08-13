@@ -183,10 +183,10 @@
     </div>
 </div>
 
-<!-- 加密数据（由老师在管理页“发布”后生成并上传） -->
-<script src="grades-data.js"></script>
+<!-- 加密数据（由老师在管理页“发布”后生成并上传），改为动态加载以突破浏览器缓存 -->
 <script>
 (function(){
+    function startApp(){
     'use strict';
     var SUBJECTS = [
         {key:'chinese', label:'语文'}, {key:'math', label:'数学'},
@@ -352,6 +352,31 @@
         $('resultCard').classList.add('hidden');
         $('loginCard').classList.remove('hidden');
     });
+    }
+    window.__startParentApp = startApp;
+})();
+</script>
+<script>
+(function(){
+    var base = 'grades-data.js';
+    function boot(v, triedFallback){
+        var s = document.createElement('script');
+        s.src = base + (v ? ('?v=' + encodeURIComponent(v)) : '');
+        s.onload = function(){ if (window.__startParentApp) window.__startParentApp(); };
+        s.onerror = function(){
+            if (!triedFallback){ boot('', true); }
+            else if (window.__startParentApp){ window.__startParentApp(); }
+        };
+        document.head.appendChild(s);
+    }
+    if (window.fetch){
+        fetch(base, { method:'HEAD', cache:'no-store' })
+            .then(function(r){ return r.headers.get('Last-Modified') || String(Date.now()); })
+            .catch(function(){ return String(Date.now()); })
+            .then(boot);
+    } else {
+        boot(String(Date.now()), false);
+    }
 })();
 </script>
 </body>
